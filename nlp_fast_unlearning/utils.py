@@ -90,14 +90,18 @@ def get_classwise_dataset(dataset):
 
 
 def find_error_maximizing_noise(model, classes_to_forget, vocab_class):
+    ensure_deterministic()
     best_noise = {}
 
+    max_noise_token = int(vocab_class.vocab_size * 0.3)
+    search_len = int(vocab_class.vocab_size * 0.1)
+    search_space = np.random.permutation(max_noise_token)[:search_len]
     model.train(False)
     for class_id in classes_to_forget:
         best_loss = 0
         print("Searching for error maximizing noise for class ", class_id)
         with torch.no_grad():
-            for noise_token in range(vocab_class.vocab_size):
+            for noise_token in search_space:
                 inputs = noise_token * torch.ones((1, 100)).long()
                 labels = torch.zeros(1).long() + class_id
                 labels, inputs, offsets = vocab_class.collate_batch(zip(labels, inputs))
@@ -140,11 +144,15 @@ def prepare_dbpedia(
     classes_to_forget=None,
     model=None,
     retain_to_forget_ratio=retain_to_forget_ratio,
+    vocab_class=None,
 ):
     ensure_deterministic()
     train_split, test_split = DBpedia()
 
-    dbpedia_vocab = Vocab(train_split)
+    if vocab_class is None:
+        dbpedia_vocab = Vocab(train_split)
+    else:
+        dbpedia_vocab = vocab_class
 
     train_dataset = to_map_style_dataset(train_split)
     test_dataset = to_map_style_dataset(test_split)
@@ -177,7 +185,7 @@ def prepare_dbpedia(
             train_dataloader,
             val_dataloader,
             test_dataloader,
-            dbpedia_vocab.vocab_size,
+            dbpedia_vocab,
         )
     elif for_baseline_only is False:
         assert classes_to_forget is not None, "Please provide a list of forget classes"
